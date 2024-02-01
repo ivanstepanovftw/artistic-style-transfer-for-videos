@@ -1,34 +1,35 @@
 import os
-from pathlib import Path
 
 import cv2
 import numpy as np
 import torch
-import torchvision.transforms as transforms
-from PIL import Image
+from torchvision import transforms
+from tqdm import tqdm
 
 
-def tensor_to_image(tensor: torch.Tensor, means: torch.Tensor, stds: torch.Tensor) -> Image.Image:
+def tensor_to_frame(tensor: torch.Tensor, means: torch.Tensor, stds: torch.Tensor) -> np.ndarray:
+    """
+    Input: (C, H, W) Tensor, normalized, RGB
+    Output: (H, W, C) ndarray, BGR
+    """
     transform = transforms.Compose([
         transforms.Normalize((-means / stds).tolist(), (1.0 / stds).tolist()),
         transforms.Lambda(lambda x: x[[2, 1, 0], ...]),  # RGB to BGR
-        transforms.ToPILImage()
+        transforms.ToPILImage(),
+        transforms.Lambda(lambda x: np.array(x))
     ])
     return transform(tensor)
-
-
-def image_to_frame(image: Image.Image) -> np.ndarray:
-    return np.array(image)
 
 
 def main():
     video_filepath = "examples/video/sintel.mp4"
     root_path = "root/sintel.mp4"
+    frames_path = f"{root_path}/frame"
     output_filepath, fourcc = "output/sintel.mp4/out_mp4v.mp4", "mp4v"
     # output_filepath, fourcc = "output/sintel.mp4/out_vp90.webm", "VP90"
+    # output_filepath, fourcc = "output/sintel.mp4/out_ffv1.avi", "FFV1"
     # output_filepath, fourcc = "output/sintel.mp4/out_xvid.avi", "xvid"
     # output_filepath, fourcc = "output/sintel.mp4/out_mjpg.avi", "MJPG"
-    # output_filepath, fourcc = "output/sintel.mp4/out_ffv1.avi", "FFV1"
 
     os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
 
@@ -39,26 +40,27 @@ def main():
     min_vals = (0 - mean) / std
     max_vals = (1 - mean) / std
 
-    frames = sorted(Path(root_path).glob(f"*"), key=lambda x: int(x.name))
-    print(f"frames: {frames}")
-
     vidcap = cv2.VideoCapture(video_filepath)
     frame_count = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    # Make video from input frames
+    frame_indices = sorted([int(x.name) for x in os.scandir(frames_path) if x.is_dir()])
+    if len(frame_indices) != frame_count:
+        print("WARNING: Number of frames in video does not match number of frames in root directory")
     fourcc = cv2.VideoWriter_fourcc(*fourcc)
 
     out = None
 
-    for frame_filepath in frames:
-        print(f"frame_filepath: {frame_filepath}")
-        styled_filepath = f"{frame_filepath}/styled.pt"
+    for frame_i in tqdm(frame_indices, desc="Joining video"):
+        frame_path = f"{frames_path}/{frame_i}"
+
+        styled_filepath = f"{frame_path}/styled.pt"
         styled = torch.load(styled_filepath)
         styled.data = styled.data.clamp_(min_vals[:, None, None], max_vals[:, None, None])
-        styled = image_to_frame(tensor_to_image(styled, mean, std))
-        if not out:
-            frame_shape = styled.shape[1], styled.shape[0]
-            print(f"Frame shape: {frame_shape}")
+        styled = tensor_to_frame(styled, mean, std)
+        h, w, c = styled.shape
+        if c == 4:
+            styled = styled[..., :3]
+        if out is None:
+            frame_shape = w, h
             out = cv2.VideoWriter(output_filepath, fourcc, vidcap.get(cv2.CAP_PROP_FPS), frame_shape)
         out.write(styled)
 
