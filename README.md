@@ -24,11 +24,22 @@ Unofficial implementation in PyTorch of an "Artistic style transfer for videos" 
 
 ## Installation
 
-To set up the application, run the following command:
+### Prerequisites
+- Python 3.7+
+- pip
+- [Git LFS](https://git-lfs.github.com/) (optional)
 
-```shell
-python -m pip install -U -r requirements.txt
-```
+### Install
+
+1. Clone the repository with [Git LFS](https://git-lfs.github.com/) support.
+2. Verify that example files are downloaded with:
+   ```shell
+   git lfs pull
+   ```
+3. Install dependencies with:
+   ```shell
+   python -m pip install -U -r requirements.txt
+   ```
 
 ## Video Style Transfer
 
